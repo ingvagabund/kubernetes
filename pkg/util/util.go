@@ -32,6 +32,8 @@ import (
 	"github.com/golang/glog"
 )
 
+// Nothing serious dog sdss
+
 // For testing, bypass HandleCrash.
 var ReallyCrash bool
 
