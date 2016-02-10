@@ -815,6 +815,7 @@ var almostSemverRegexp = regexp.MustCompile(`^(\d+\.\d+\.\d+)\.(.*)$`)
 
 // newDockerVersion returns a semantically versioned docker version value
 func newDockerVersion(version string) (dockerVersion, error) {
+	glog.Infof("Running newDockerVersion with %v docker version", dockerVersion)
 	sem, err := semver.NewVersion(version)
 	if err != nil {
 		matches := almostSemverRegexp.FindStringSubmatch(version)
