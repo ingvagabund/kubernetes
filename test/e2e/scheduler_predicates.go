@@ -179,6 +179,7 @@ func waitForStableCluster(c *client.Client) int {
 var _ = Describe("SchedulerPredicates [Serial]", func() {
 	var c *client.Client
 	var nodeList *api.NodeList
+	var systemPodsNo int
 	var totalPodCapacity int64
 	var RCName string
 	var ns string
@@ -198,6 +199,16 @@ var _ = Describe("SchedulerPredicates [Serial]", func() {
 		c = framework.Client
 		ns = framework.Namespace.Name
 		nodeList = ListSchedulableNodesOrDie(c)
+
+		// Every test case in this suite assumes that cluster add-on pods stay stable and
+		// cannot be run in parallel with any other test that touches Nodes or Pods.
+		// It is so because we need to have precise control on what's running in the cluster.
+		systemPods, err := c.Pods(api.NamespaceSystem).List(api.ListOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		systemPodsNo = len(systemPods.Items)
+
+		err = waitForPodsRunningReady(api.NamespaceSystem, systemPodsNo, podReadyBeforeTimeout)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	// This test verifies that max-pods flag works as advertised. It assumes that cluster add-on pods stay stable
@@ -284,7 +295,7 @@ var _ = Describe("SchedulerPredicates [Serial]", func() {
 			_, found := nodeToCapacityMap[pod.Spec.NodeName]
 			Expect(found).To(Equal(true))
 			if pod.Status.Phase == api.PodRunning {
-				Logf("Pod %v requesting capacity %v on Node %v", pod.Name, getRequestedCPU(pod), pod.Spec.NodeName)
+				Logf("Pod %v requesting resource %v on Node %v", pod.Name, getRequestedCPU(pod), pod.Spec.NodeName)
 				nodeToCapacityMap[pod.Spec.NodeName] -= getRequestedCPU(pod)
 			}
 		}
@@ -395,7 +406,7 @@ var _ = Describe("SchedulerPredicates [Serial]", func() {
 		cleanupPods(c, ns)
 	})
 
-	It("validates that a pod with an invalid Affinity is rejected [Conformance]", func() {
+	It("validates that a pod with an invalid NodeAffinity is rejected [Feature:NodeAffinity]", func() {
 
 		By("Trying to launch a pod with an invalid Affinity data.")
 		podName := "without-label"
@@ -519,7 +530,7 @@ var _ = Describe("SchedulerPredicates [Serial]", func() {
 
 	// Test Nodes does not have any label, hence it should be impossible to schedule Pod with
 	// non-nil NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
-	It("validates that NodeAffinity is respected if not matching [Conformance]", func() {
+	It("validates that NodeAffinity is respected if not matching [Feature:NodeAffinity]", func() {
 		By("Trying to schedule Pod with nonempty NodeSelector.")
 		podName := "restricted-pod"
 
@@ -575,7 +586,7 @@ var _ = Describe("SchedulerPredicates [Serial]", func() {
 
 	// Keep the same steps with the test on NodeSelector,
 	// but specify Affinity in Pod.Annotations, instead of NodeSelector.
-	It("validates that required NodeAffinity setting is respected if matching [Conformance]", func() {
+	It("validates that required NodeAffinity setting is respected if matching [Feature:NodeAffinity]", func() {
 		// launch a pod to find a node which can launch a pod. We intentionally do
 		// not just take the node list and choose the first of them. Depending on the
 		// cluster and the scheduler it might be that a "normal" pod cannot be
@@ -669,7 +680,7 @@ var _ = Describe("SchedulerPredicates [Serial]", func() {
 	})
 
 	// Verify that an escaped JSON string of NodeAffinity in a YAML PodSpec works.
-	It("validates that embedding the JSON NodeAffinity setting as a string in the annotation value work [Conformance]", func() {
+	It("validates that embedding the JSON NodeAffinity setting as a string in the annotation value work [Feature:NodeAffinity]", func() {
 		// launch a pod to find a node which can launch a pod. We intentionally do
 		// not just take the node list and choose the first of them. Depending on the
 		// cluster and the scheduler it might be that a "normal" pod cannot be

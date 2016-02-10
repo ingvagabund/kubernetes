@@ -77,9 +77,9 @@ const (
 	k8sRktNamespaceAnno    = "rkt.kubernetes.io/namespace"
 	//TODO: remove the creation time annotation once this is closed: https://github.com/coreos/rkt/issues/1789
 	k8sRktCreationTimeAnno           = "rkt.kubernetes.io/created"
-	k8sRktContainerHashAnno          = "rkt.kubernetes.io/containerhash"
-	k8sRktRestartCountAnno           = "rkt.kubernetes.io/restartcount"
-	k8sRktTerminationMessagePathAnno = "rkt.kubernetes.io/terminationMessagePath"
+	k8sRktContainerHashAnno          = "rkt.kubernetes.io/container-hash"
+	k8sRktRestartCountAnno           = "rkt.kubernetes.io/restart-count"
+	k8sRktTerminationMessagePathAnno = "rkt.kubernetes.io/termination-message-path"
 	dockerPrefix                     = "docker://"
 
 	authDir            = "auth.d"
@@ -1088,7 +1088,7 @@ func (r *Runtime) SyncPod(pod *api.Pod, podStatus api.PodStatus, internalPodStat
 
 		c := runningPod.FindContainerByName(container.Name)
 		if c == nil {
-			if kubecontainer.ShouldContainerBeRestartedOldVersion(&container, pod, &podStatus) {
+			if kubecontainer.ShouldContainerBeRestarted(&container, pod, internalPodStatus) {
 				glog.V(3).Infof("Container %+v is dead, but RestartPolicy says that we should restart it.", container)
 				// TODO(yifan): Containers in one pod are fate-sharing at this moment, see:
 				// https://github.com/appc/spec/issues/276.
@@ -1449,7 +1449,7 @@ func (r *Runtime) GetPodStatus(uid types.UID, name, namespace string) (*kubecont
 	for _, pod := range listResp.Pods {
 		manifest, creationTime, restartCount, err := getPodInfo(pod)
 		if err != nil {
-			glog.Warning("rkt: Couldn't get necessary info from the rkt pod, (uuid %q): %v", pod.Id, err)
+			glog.Warningf("rkt: Couldn't get necessary info from the rkt pod, (uuid %q): %v", pod.Id, err)
 			continue
 		}
 

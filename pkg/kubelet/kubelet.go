@@ -207,6 +207,7 @@ func NewMainKubelet(
 	enableCustomMetrics bool,
 	volumeStatsAggPeriod time.Duration,
 	containerRuntimeOptions []kubecontainer.Option,
+	hairpinMode bool,
 ) (*Kubelet, error) {
 	if rootDirectory == "" {
 		return nil, fmt.Errorf("invalid root directory %q", rootDirectory)
@@ -366,6 +367,7 @@ func NewMainKubelet(
 	// Initialize the runtime.
 	switch containerRuntime {
 	case "docker":
+		glog.Infof("Hairpin mode set to %v", hairpinMode)
 		// Only supported one for now, continue.
 		klet.containerRuntime = dockertools.NewDockerManager(
 			dockerClient,
@@ -388,9 +390,11 @@ func NewMainKubelet(
 			imageBackOff,
 			serializeImagePulls,
 			enableCustomMetrics,
+			hairpinMode,
 			containerRuntimeOptions...,
 		)
 	case "rkt":
+		// TODO: Include hairpin mode settings in rkt?
 		conf := &rkt.Config{
 			Path:            rktPath,
 			Stage1Image:     rktStage1Image,
@@ -1883,7 +1887,7 @@ func (kl *Kubelet) cleanupOrphanedVolumes(pods []*api.Pod, runningPods []*kubeco
 		runningSet.Insert(string(pod.ID))
 	}
 
-	for name, vol := range currentVolumes {
+	for name, cleanerTuple := range currentVolumes {
 		if _, ok := desiredVolumes[name]; !ok {
 			parts := strings.Split(name, "/")
 			if runningSet.Has(parts[0]) {
@@ -1896,9 +1900,18 @@ func (kl *Kubelet) cleanupOrphanedVolumes(pods []*api.Pod, runningPods []*kubeco
 			// TODO(yifan): Refactor this hacky string manipulation.
 			kl.volumeManager.DeleteVolumes(types.UID(parts[0]))
 			//TODO (jonesdl) This should not block other kubelet synchronization procedures
-			err := vol.TearDown()
+			err := cleanerTuple.Cleaner.TearDown()
 			if err != nil {
 				glog.Errorf("Could not tear down volume %q: %v", name, err)
+			}
+
+			// volume is unmounted.  some volumes also require detachment from the node.
+			if cleanerTuple.Detacher != nil {
+				detacher := *cleanerTuple.Detacher
+				err = detacher.Detach()
+				if err != nil {
+					glog.Errorf("Could not detach volume %q: %v", name, err)
+				}
 			}
 		}
 	}
@@ -2356,8 +2369,20 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan kubetypes.PodUpdate, handler
 	case update := <-kl.livenessManager.Updates():
 		// We only care about failures (signalling container death) here.
 		if update.Result == proberesults.Failure {
-			glog.V(1).Infof("SyncLoop (container unhealthy): %q", format.Pod(update.Pod))
-			handler.HandlePodSyncs([]*api.Pod{update.Pod})
+			// We should not use the pod from livenessManager, because it is never updated after
+			// initialization.
+			// TODO(random-liu): This is just a quick fix. We should:
+			//  * Just pass pod UID in probe updates to make this less confusing.
+			//  * Maybe probe manager should rely on pod manager, or at least the pod in probe manager
+			//  should be updated.
+			pod, ok := kl.podManager.GetPodByUID(update.Pod.UID)
+			if !ok {
+				// If the pod no longer exists, ignore the update.
+				glog.V(4).Infof("SyncLoop (container unhealthy): ignore irrelevant update: %#v", update)
+				break
+			}
+			glog.V(1).Infof("SyncLoop (container unhealthy): %q", format.Pod(pod))
+			handler.HandlePodSyncs([]*api.Pod{pod})
 		}
 	case <-housekeepingCh:
 		if !kl.allSourcesReady() {
@@ -3135,19 +3160,6 @@ func GetPhase(spec *api.PodSpec, info []api.ContainerStatus) api.PodPhase {
 		glog.V(5).Infof("pod default case, pending")
 		return api.PodPending
 	}
-}
-
-// Get the internal PodStatus from the cache if the cache exists;
-// otherwise, query the runtime directly.
-func (kl *Kubelet) getRuntimePodStatus(pod *api.Pod) (*kubecontainer.PodStatus, error) {
-	start := kl.clock.Now()
-	defer func() {
-		metrics.PodStatusLatency.Observe(metrics.SinceInMicroseconds(start))
-	}()
-	if kl.podCache != nil {
-		return kl.podCache.Get(pod.UID)
-	}
-	return kl.containerRuntime.GetPodStatus(pod.UID, pod.Name, pod.Namespace)
 }
 
 func (kl *Kubelet) generatePodStatus(pod *api.Pod, podStatus *kubecontainer.PodStatus) api.PodStatus {

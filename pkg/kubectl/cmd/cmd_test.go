@@ -124,9 +124,8 @@ func newExternalScheme() (*runtime.Scheme, meta.RESTMapper, runtime.Codec) {
 		for kind := range scheme.KnownTypes(gv) {
 			gvk := gv.WithKind(kind)
 
-			mixedCase := false
 			scope := meta.RESTScopeNamespace
-			mapper.Add(gvk, scope, mixedCase)
+			mapper.Add(gvk, scope)
 		}
 	}
 
@@ -291,6 +290,7 @@ func NewAPIFactory() (*cmdutil.Factory, *testFactory, runtime.Codec) {
 	}
 	rf := cmdutil.NewFactory(nil)
 	f.PodSelectorForObject = rf.PodSelectorForObject
+	f.MapBasedSelectorForObject = rf.MapBasedSelectorForObject
 	f.PortsForObject = rf.PortsForObject
 	f.LabelsForObject = rf.LabelsForObject
 	f.CanBeExposed = rf.CanBeExposed

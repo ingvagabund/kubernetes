@@ -31,6 +31,9 @@ type KubeProxyConfiguration struct {
 	HealthzPort int `json:"healthzPort"`
 	// hostnameOverride, if non-empty, will be used as the identity instead of the actual hostname.
 	HostnameOverride string `json:"hostnameOverride"`
+	// iptablesMasqueradeBit is the bit of the iptables fwmark space to use for SNAT if using
+	// the pure iptables proxy mode. Values must be within the range [0, 31].
+	IPTablesMasqueradeBit *int `json:"iptablesMasqueradeBit"`
 	// iptablesSyncPeriod is the period that iptables rules are refreshed (e.g. '5s', '1m',
 	// '2h22m').  Must be greater than 0.
 	IPTablesSyncPeriod unversioned.Duration `json:"iptablesSyncPeriodSeconds"`
@@ -241,6 +244,11 @@ type KubeletConfiguration struct {
 	// configureCBR0 enables the kublet to configure cbr0 based on
 	// Node.Spec.PodCIDR.
 	ConfigureCBR0 bool `json:"configureCbr0"`
+	// Should the kubelet set the hairpin flag on veth interfaces for containers
+	// it creates? Setting this flag allows endpoints in a Service to
+	// loadbalance back to themselves if they should try to access their own
+	// Service.
+	HairpinMode bool `json:"configureHairpinMode"`
 	// maxPods is the number of pods that can run on this Kubelet.
 	MaxPods int `json:"maxPods"`
 	// dockerExecHandlerName is the handler to use when executing a command
