@@ -24,7 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/runtime"
 )
 
-// For any test of the style:
+// For any test of the style: safsfdff
 //   ...
 //   <- time.After(timeout):
 //      t.Errorf("Timed out")
