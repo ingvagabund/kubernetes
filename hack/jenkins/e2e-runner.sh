@@ -152,6 +152,22 @@ if [[ "${JENKINS_USE_TRUSTY_IMAGES:-}" =~ ^[yY]$ ]]; then
   export KUBE_OS_DISTRIBUTION="trusty"
 fi
 
+function e2e_test() {
+    local -r ginkgo_test_args="${1}"
+    # Check to make sure the cluster is up before running tests, and fail if it's not.
+    go run ./hack/e2e.go ${E2E_OPT:-} -v --isup
+    # Jenkins will look at the junit*.xml files for test failures, so don't exit with a nonzero
+    # error code if it was only tests that failed.
+    go run ./hack/e2e.go ${E2E_OPT:-} -v --test \
+      ${ginkgo_test_args:+--test_args="${ginkgo_test_args}"} \
+      && exitcode=0 || exitcode=$?
+    if [[ "${E2E_PUBLISH_GREEN_VERSION:-}" == "true" && ${exitcode} == 0 ]]; then
+        # Use plaintext version file packaged with kubernetes.tar.gz
+        echo "Publish version to ci/latest-green.txt: $(cat version)"
+        gsutil cp ./version gs://kubernetes-release/ci/latest-green.txt
+    fi
+}
+
 echo "--------------------------------------------------------------------------------"
 echo "Test Environment:"
 printenv | sort
@@ -207,8 +223,9 @@ fi
 cd kubernetes
 
 # Upload build start time and k8s version to GCS, but not on PR Jenkins.
+# On PR Jenkins this is done before the build.
 if [[ ! "${JOB_NAME}" =~ -pull- ]]; then
-    bash <(curl -fsS --retry 3 "https://raw.githubusercontent.com/kubernetes/kubernetes/master/hack/jenkins/upload-started.sh")
+    JENKINS_BUILD_STARTED=true bash <(curl -fsS --retry 3 "https://raw.githubusercontent.com/kubernetes/kubernetes/master/hack/jenkins/upload-to-gcs.sh")
 fi
 
 # Have cmd/e2e run by goe2e.sh generate JUnit report in ${WORKSPACE}/junit*.xml
@@ -230,7 +247,7 @@ fi
 ### Pre Set Up ###
 # Install gcloud from a custom path if provided. Used to test GKE with gcloud
 # at HEAD, release candidate.
-if [[ ! -z "${CLOUDSDK_BUCKET:-}" ]]; then
+if [[ -n "${CLOUDSDK_BUCKET:-}" ]]; then
     gsutil -mq cp -r "${CLOUDSDK_BUCKET}" ~
     rm -rf ~/repo ~/cloudsdk
     mv ~/$(basename "${CLOUDSDK_BUCKET}") ~/repo
@@ -266,19 +283,26 @@ if [[ "${E2E_UP,,}" == "true" ]]; then
     fi
 fi
 
-### Run tests ###
-# Jenkins will look at the junit*.xml files for test failures, so don't exit
-# with a nonzero error code if it was only tests that failed.
-if [[ "${E2E_TEST,,}" == "true" ]]; then
-    # Check to make sure the cluster is up before running tests, and fail if it's not.
-    go run ./hack/e2e.go ${E2E_OPT:-} -v --isup
-    go run ./hack/e2e.go ${E2E_OPT:-} -v --test \
-      ${GINKGO_TEST_ARGS:+--test_args="${GINKGO_TEST_ARGS}"} \
-      && exitcode=0 || exitcode=$?
-    if [[ "${E2E_PUBLISH_GREEN_VERSION:-}" == "true" && ${exitcode} == 0 && -n ${build_version:-} ]]; then
-        echo "Publish build_version to ci/latest-green.txt: ${build_version}"
-        gsutil cp ./version gs://kubernetes-release/ci/latest-green.txt
+# Allow download & unpack of alternate version of tests, for cross-version & upgrade testing.
+if [[ -n "${JENKINS_PUBLISHED_TEST_VERSION:-}" ]]; then
+    cd ..
+    mv kubernetes kubernetes_old
+    fetch_published_version_tars "${JENKINS_PUBLISHED_TEST_VERSION}"
+    cd kubernetes
+    # Upgrade the cluster before running other tests
+    if [[ "${E2E_UPGRADE_TEST,,}" == "true" ]]; then
+	# Add a report prefix for the e2e tests so that the tests don't get overwritten when we run
+	# the rest of the e2es.
+        E2E_REPORT_PREFIX='upgrade' e2e_test "${GINKGO_UPGRADE_TEST_ARGS:-}"
+	# If JENKINS_USE_OLD_TESTS is set, back out into the old tests now that we've upgraded.
+        if [[ "${JENKINS_USE_OLD_TESTS:-}" == "true" ]]; then
+            cd ../kubernetes_old
+        fi
     fi
+fi
+
+if [[ "${E2E_TEST,,}" == "true" ]]; then
+    e2e_test "${GINKGO_TEST_ARGS:-}"
 fi
 
 ### Start Kubemark ###
@@ -328,7 +352,9 @@ fi
 # * started and destroyed (normal e2e)
 # * neither started nor destroyed (soak test)
 if [[ "${E2E_UP:-}" == "${E2E_DOWN:-}" && -f "${gcp_resources_before}" && -f "${gcp_resources_after}" ]]; then
-  if ! diff -sw -U0 -F'^\[.*\]$' "${gcp_resources_before}" "${gcp_resources_after}" && [[ "${FAIL_ON_GCP_RESOURCE_LEAK:-}" == "true" ]]; then
+  difference=$(diff -sw -U0 -F'^\[.*\]$' "${gcp_resources_before}" "${gcp_resources_after}") || true
+  if [[ -n $(echo "${difference}" | tail -n +3 | grep -E "^\+") ]] && [[ "${FAIL_ON_GCP_RESOURCE_LEAK:-}" == "true" ]]; then
+    echo "${difference}"
     echo "!!! FAIL: Google Cloud Platform resources leaked while running tests!"
     exit 1
   fi

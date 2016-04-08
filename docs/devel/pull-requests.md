@@ -38,6 +38,7 @@ Documentation for other releases can be found at
 - [Life of a Pull Request](#life-of-a-pull-request)
   - [Before sending a pull request](#before-sending-a-pull-request)
   - [Release Notes](#release-notes)
+    - [Reviewing pre-release notes](#reviewing-pre-release-notes)
   - [Visual overview](#visual-overview)
 - [Other notes](#other-notes)
 - [Automation](#automation)
@@ -73,16 +74,34 @@ The following will save time for both you and your reviewer:
 
 ## Release Notes
 
-All pull requests are initiated with a `needs-release-note` label.
-There are many `release-note-*` label options, including `release-note-none`.
-If your PR does not require any visibility at release time, you may use a
-`release-note-none` label.  Otherwise, please choose a `release-note-*` label
-that fits your PR.
+This section applies only to pull requests on the master branch.
 
-Additionally, `release-note-none` is not allowed on PRs on release branches.
+1. All pull requests are initiated with a `release-note-label-needed` label.
+1. For a PR to be ready to merge, the `release-note-label-needed` label must be removed and one of the other `release-note-*` labels must be added.
+1. `release-note-none` is a valid option if the PR does not need to be mentioned
+ at release time.
+1. The PR title is the **release note** you want published at release time.
+  * NOTE: PR titles are mutable and should reflect a release note friendly
+    message for any `release-note-*` labeled PRs.
 
-Finally, ensure your PR title is the release note you want published at relase
-time.
+The only exception to these rules is when a PR is not a cherry-pick and is
+targeted directly to the non-master branch.  In this case, a `release-note-*`
+label is required for that non-master PR.
+
+### Reviewing pre-release notes
+
+**NOTE: THIS TOOLING IS NOT YET AVAILABLE, BUT COMING SOON!**
+
+At any time, you can see what the release notes will look like on any branch.
+
+```
+$ git pull https://github.com/kubernetes/release
+$ RELNOTES=$PWD/release/relnotes
+$ cd /to/your/kubernetes/repo
+$ $RELNOTES -man # for details on how to use the tool
+# Show release notes from the last release on a branch to HEAD
+$ $RELNOTES --raw --branch=master
+```
 
 ## Visual overview
 

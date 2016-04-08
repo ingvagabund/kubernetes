@@ -191,6 +191,7 @@ func NewMainKubelet(
 	cgroupRoot string,
 	containerRuntime string,
 	rktPath string,
+	rktAPIEndpoint string,
 	rktStage1Image string,
 	mounter mount.Interface,
 	writer kubeio.Writer,
@@ -223,7 +224,6 @@ func NewMainKubelet(
 	if resyncInterval <= 0 {
 		return nil, fmt.Errorf("invalid sync frequency %d", resyncInterval)
 	}
-	dockerClient = dockertools.NewInstrumentedDockerInterface(dockerClient)
 
 	serviceStore := cache.NewStore(cache.MetaNamespaceKeyFunc)
 	if kubeClient != nil {
@@ -416,6 +416,7 @@ func NewMainKubelet(
 			InsecureOptions: "image,ondisk",
 		}
 		rktRuntime, err := rkt.New(
+			rktAPIEndpoint,
 			conf,
 			klet,
 			recorder,
@@ -1332,9 +1333,10 @@ func makePortMappings(container *api.Container) (ports []kubecontainer.PortMappi
 	return
 }
 
-func generatePodHostNameAndDomain(pod *api.Pod, clusterDomain string) (string, string) {
+func (kl *Kubelet) GeneratePodHostNameAndDomain(pod *api.Pod) (string, string) {
 	// TODO(vmarmol): Handle better.
 	// Cap hostname at 63 chars (specification is 64bytes which is 63 chars and the null terminating char).
+	clusterDomain := kl.clusterDomain
 	const hostnameMaxLen = 63
 	podAnnotations := pod.Annotations
 	if podAnnotations == nil {
@@ -1364,7 +1366,7 @@ func generatePodHostNameAndDomain(pod *api.Pod, clusterDomain string) (string, s
 func (kl *Kubelet) GenerateRunContainerOptions(pod *api.Pod, container *api.Container, podIP string) (*kubecontainer.RunContainerOptions, error) {
 	var err error
 	opts := &kubecontainer.RunContainerOptions{CgroupParent: kl.cgroupRoot}
-	hostname, hostDomainName := generatePodHostNameAndDomain(pod, kl.clusterDomain)
+	hostname, hostDomainName := kl.GeneratePodHostNameAndDomain(pod)
 	opts.Hostname = hostname
 	vol, ok := kl.volumeManager.GetVolumes(pod.UID)
 	if !ok {
@@ -1795,6 +1797,9 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, podStatus *kubecont
 		return err
 	}
 
+	if !kl.shapingEnabled() {
+		return nil
+	}
 	ingress, egress, err := extractBandwidthResources(pod)
 	if err != nil {
 		return err
@@ -2731,11 +2736,14 @@ func (kl *Kubelet) reconcileCBR0(podCIDR string) error {
 	if err := ensureCbr0(cidr, kl.hairpinMode == componentconfig.PromiscuousBridge, kl.babysitDaemons); err != nil {
 		return err
 	}
-	if kl.shaper == nil {
-		glog.V(5).Info("Shaper is nil, creating")
-		kl.shaper = bandwidth.NewTCShaper("cbr0")
+	if kl.shapingEnabled() {
+		if kl.shaper == nil {
+			glog.V(5).Info("Shaper is nil, creating")
+			kl.shaper = bandwidth.NewTCShaper("cbr0")
+		}
+		return kl.shaper.ReconcileInterface()
 	}
-	return kl.shaper.ReconcileInterface()
+	return nil
 }
 
 // updateNodeStatus updates node status to master with retries.
@@ -3383,7 +3391,8 @@ func (kl *Kubelet) convertStatusToAPIStatus(pod *api.Pod, podStatus *kubecontain
 		} else if reason == kubecontainer.ErrImagePullBackOff ||
 			reason == kubecontainer.ErrImageInspect ||
 			reason == kubecontainer.ErrImagePull ||
-			reason == kubecontainer.ErrImageNeverPull {
+			reason == kubecontainer.ErrImageNeverPull ||
+			reason == kubecontainer.RegistryUnavailable {
 			// mark it as waiting, reason will be filled bellow
 			containerStatus.State = api.ContainerState{Waiting: &api.ContainerStateWaiting{}}
 		} else if reason == kubecontainer.ErrRunContainer {
@@ -3591,6 +3600,15 @@ func (kl *Kubelet) updatePodCIDR(cidr string) {
 		kl.networkPlugin.Event(network.NET_PLUGIN_EVENT_POD_CIDR_CHANGE, details)
 	}
 }
+
+func (kl *Kubelet) shapingEnabled() bool {
+	// Disable shaping if a network plugin is defined and supports shaping
+	if kl.networkPlugin != nil && kl.networkPlugin.Capabilities().Has(network.NET_PLUGIN_CAPABILITY_SHAPING) {
+		return false
+	}
+	return true
+}
+
 func (kl *Kubelet) GetNodeConfig() cm.NodeConfig {
 	return kl.containerManager.GetNodeConfig()
 }

@@ -155,6 +155,16 @@
                 export MULTIZONE="true"
                 export E2E_ZONES="us-central1-a us-central1-b us-central1-f" # Where the nodes reside.  Master is in the first one.
                 export KUBE_GCE_ZONE="us-central1-a" # Where the master resides - hangover due to legacy scripts.
+        - 'gce-kubenet':
+            description: 'Run all non-flaky, non-slow, non-disruptive, non-feature tests on GCE using kubenet as network provider'
+            timeout: 120
+            emails: 'mixia@google.com'
+            test-owner: 'mixia'
+            job-env: |
+                export PROJECT="k8s-jkns-e2e-gce-kubenet"
+                export GINKGO_TEST_ARGS="--ginkgo.skip=\[Slow\]|\[Serial\]|\[Disruptive\]|\[Flaky\]|\[Feature:.+\]"
+                export GINKGO_PARALLEL="y"
+                export NETWORK_PROVIDER="kubenet"
     jobs:
         - 'kubernetes-e2e-{suffix}'
 
@@ -572,7 +582,6 @@
     jobs:
         - 'kubernetes-e2e-{suffix}'
 
-# ==============================================================================
 # NOTE: From here on all jobs use Trusty as the image for master and/or nodes.
 # Please add templates/groups/projects/jobs that use ContainerVm above/below
 # this section (search "End of Trusty jobs" for the ending separator).
@@ -758,48 +767,137 @@
     jobs:
         - 'kubernetes-e2e-gce-trusty-{suffix}'
 
-# Jobs that run e2e tests on GKE with Trusty as node image on the release-1.1 branch.
+# Jobs that run e2e tests on GKE with Trusty as node image on the release-1.2
+# branch. Note that the variable "E2E_NAME" in all following jobs are set to
+# have the "-trusty" suffix, which is required to start a GKE cluster with
+# Trusty images. The variable "KUBE_OS_DISTRIBUTION" is set to "trusty" so that
+# the OS dependendent test cases will use Trusty in their assertions.
 - project:
     name: kubernetes-e2e-gke-trusty
-    trigger-job: 'kubernetes-build-1.1'
+    trigger-job: 'kubernetes-build-1.2'
     test-owner: 'wonderfly@google.com'
-    branch: 'release-1.1'
-    runner: '{old-runner-1-1}'
-    post-env: ''
+    provider-env: |
+        {gke-provider-env}
     emails: 'wonderfly@google.com,qzheng@google.com'
     suffix:
-        - 'gke-trusty-prod':
-            timeout: 180
-            # Failing constantly due to a known issue.
-            disable_job: true
-            description: |
-                Run e2e tests with Trusty as node image using the following config:<br>
-                - provider: GKE<br>
-                - api proxy: prod<br>
-                - borg job: prod<br>
-                - client (kubectl): release/stable.txt<br>
-                - cluster (k8s): release/stable.txt<br>
-                - tests: release/stable.txt
-        - 'gke-trusty-staging':
-            timeout: 300
-            description: |
-                Run e2e tests with Trusty as node image using the following config:<br>
-                - provider: GKE<br>
-                - api proxy: staging<br>
-                - borg job: staging<br>
-                - client (kubectl): release/stable.txt<br>
-                - cluster (k8s): release/stable.txt<br>
-                - tests: release/stable.txt
         - 'gke-trusty-test':
-            timeout: 300
-            description: |
-                Run e2e tests with Trusty as node image using the following config:<br>
-                - provider: GKE<br>
-                - api proxy: staging<br>
-                - borg job: test<br>
-                - client (kubectl): release/stable.txt<br>
-                - cluster (k8s): release/stable.txt<br>
-                - tests: release/stable.txt
+            description: 'Run E2E tests on GKE test endpoint.'
+            timeout: 480
+            job-env: |
+                export PROJECT="kubekins-e2e-gke-trusty-test"
+                export CLOUDSDK_BUCKET="gs://cloud-sdk-testing/rc"
+                export JENKINS_USE_SERVER_VERSION="y"
+                export E2E_NAME="jkns-gke-e2e-test-trusty"
+                export KUBE_OS_DISTRIBUTION="trusty"
+        - 'gke-trusty-subnet':
+            description: 'Run E2E tests on GKE test endpoint in a subnet.'
+            timeout: 480
+            job-env: |
+                # Subnetwork "jkns-gke-e2e-subnet-trusty" is manually created -
+                # if deleted, it will need to be recreated via
+                # `gcloud alpha compute networks create jkns-gke-e2e-subnet-trusty --mode auto`
+                export PROJECT="k8s-e2e-gke-trusty-subnet"
+                export CLOUDSDK_BUCKET="gs://cloud-sdk-testing/rc"
+                export JENKINS_USE_SERVER_VERSION="y"
+                export E2E_NAME="jkns-gke-e2e-subnet-trusty"
+                export KUBE_OS_DISTRIBUTION="trusty"
+        - 'gke-trusty-staging':
+            description: 'Run E2E tests on GKE staging endpoint.'
+            timeout: 480
+            job-env: |
+                export PROJECT="e2e-gke-trusty-staging"
+                export CLOUDSDK_BUCKET="gs://cloud-sdk-testing/rc"
+                export JENKINS_USE_SERVER_VERSION="y"
+                export CLOUDSDK_API_ENDPOINT_OVERRIDES_CONTAINER="https://staging-container.sandbox.googleapis.com/"
+                export E2E_NAME="jkns-gke-e2e-staging-trusty"
+                export KUBE_OS_DISTRIBUTION="trusty"
+        - 'gke-trusty-staging-parallel':
+            description: 'Run E2E tests on GKE staging endpoint in parallel.'
+            timeout: 80
+            job-env: |
+                export PROJECT="e2e-gke-trusty-staging-p"
+                export CLOUDSDK_BUCKET="gs://cloud-sdk-testing/rc"
+                export JENKINS_USE_SERVER_VERSION="y"
+                export CLOUDSDK_API_ENDPOINT_OVERRIDES_CONTAINER="https://staging-container.sandbox.googleapis.com/"
+                export GINKGO_TEST_ARGS="--ginkgo.skip=\[Slow\]|\[Serial\]|\[Disruptive\]|\[Flaky\]|\[Feature:.+\]"
+                export GINKGO_PARALLEL="y"
+                export E2E_NAME="jkns-gke-e2e-staging-parallel-trusty"
+                export KUBE_OS_DISTRIBUTION="trusty"
+        - 'gke-trusty-prod':
+            # Failing constantly due to a known issue (tracked internally).
+            disable_job: true
+            description: 'Run E2E tests on GKE prod endpoint.'
+            timeout: 480
+            job-env: |
+                export PROJECT="kubekins-e2e-gke-trusty-prod"
+                export CLOUDSDK_BUCKET="gs://cloud-sdk-testing/rc"
+                export JENKINS_USE_SERVER_VERSION="y"
+                export KUBE_GCE_ZONE="asia-east1-b"
+                export E2E_NAME="jkns-gke-e2e-prod-trusty"
+                export KUBE_OS_DISTRIBUTION="trusty"
+        - 'gke-trusty-prod-parallel':
+            # Failing constantly due to a known issue (tracked internally).
+            disable_job: true
+            description: 'Run E2E tests on GKE prod endpoint in parallel.'
+            timeout: 80
+            job-env: |
+                export PROJECT="e2e-gke-trusty-prod-p"
+                export CLOUDSDK_BUCKET="gs://cloud-sdk-testing/rc"
+                export JENKINS_USE_SERVER_VERSION="y"
+                export GINKGO_TEST_ARGS="--ginkgo.skip=\[Slow\]|\[Serial\]|\[Disruptive\]|\[Flaky\]|\[Feature:.+\]"
+                export GINKGO_PARALLEL="y"
+                export KUBE_GCE_ZONE="asia-east1-b"
+                export E2E_NAME="jkns-gke-e2e-prod-parallel-trusty"
+                export KUBE_OS_DISTRIBUTION="trusty"
     jobs:
         - 'kubernetes-e2e-{suffix}'
-#============================== End of Trusty jobs =============================
+
+# End of Trusty jobs
+
+- project:
+    name: kubernetes-e2e-gke-upgrades-experimental
+    trigger-job: 'kubernetes-build'
+    test-owner: 'ihmccreery'
+    emails: 'ihmccreery@google.com'
+    provider-env: '{gke-provider-env}'
+    suffix:
+        - 'gke-kubectl-skew-1.1-1.2':
+            description: 'Deploys a cluster at v1.1 and runs the v1.2 Kubectl tests.'
+            timeout: 30
+            job-env: |
+                export PROJECT="kube-jks-gke-upg-experimental"
+                export E2E_NAME="gke-ctl-skew-1-1-1-2"
+                export JENKINS_PUBLISHED_TEST_VERSION="ci/latest-1.2"
+                export GINKGO_TEST_ARGS="--ginkgo.focus=Kubectl"
+                export GINKGO_PARALLEL="y"
+        - 'gke-upgrade-master-1.1-1.2':
+            description: 'Deploys a cluster at v1.1, upgrades its master to v1.2, and runs v1.1 tests against it.'
+            timeout: 30
+            job-env: |
+                export PROJECT="kube-jks-gke-upg-experimental"
+                export E2E_NAME="gke-upg-mas-1-1-1-2"
+                export JENKINS_PUBLISHED_TEST_VERSION="ci/latest-1.2"
+                export E2E_UPGRADE_TEST="true"
+                export GINKGO_UPGRADE_TEST_ARGS="--ginkgo.focus=\[Feature:MasterUpgrade\] --upgrade-target=ci/latest-1.2"
+                export JENKINS_USE_OLD_TESTS="true"
+        - 'gke-upgrade-cluster-1.1-1.2':
+            description: 'Deploys a cluster at v1.1, upgrades the cluster to v1.2, and runs v1.1 tests against it.'
+            timeout: 30
+            job-env: |
+                export PROJECT="kube-jks-gke-upg-experimental"
+                export E2E_NAME="gke-upg-clu-1-1-1-2"
+                export JENKINS_PUBLISHED_TEST_VERSION="ci/latest-1.2"
+                export E2E_UPGRADE_TEST="true"
+                export GINKGO_UPGRADE_TEST_ARGS="--ginkgo.focus=\[Feature:ClusterUpgrade\] --upgrade-target=ci/latest-1.2"
+                export JENKINS_USE_OLD_TESTS="true"
+        - 'gke-upgrade-cluster-new-1.1-1.2':
+            description: 'Deploys a cluster at v1.1, upgrades the cluster to v1.2, and runs v1.2 tests against it.'
+            timeout: 30
+            job-env: |
+                export PROJECT="kube-jks-gke-upg-experimental"
+                export E2E_NAME="gke-upg-clu-new-1-1-1-2"
+                export JENKINS_PUBLISHED_TEST_VERSION="ci/latest-1.2"
+                export E2E_UPGRADE_TEST="true"
+                export GINKGO_UPGRADE_TEST_ARGS="--ginkgo.focus=\[Feature:ClusterUpgrade\] --upgrade-target=ci/latest-1.2"
+    jobs:
+        - 'kubernetes-e2e-{suffix}'
