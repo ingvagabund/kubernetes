@@ -36,6 +36,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/meta"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/apis/apps"
+	"k8s.io/kubernetes/pkg/apis/batch"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/runtime"
@@ -795,7 +796,7 @@ func printReplicaSetList(list *extensions.ReplicaSetList, w io.Writer, options P
 	return nil
 }
 
-func printJob(job *extensions.Job, w io.Writer, options PrintOptions) error {
+func printJob(job *batch.Job, w io.Writer, options PrintOptions) error {
 	name := job.Name
 	namespace := job.Namespace
 	containers := job.Spec.Template.Spec.Containers
@@ -848,7 +849,7 @@ func printJob(job *extensions.Job, w io.Writer, options PrintOptions) error {
 	return nil
 }
 
-func printJobList(list *extensions.JobList, w io.Writer, options PrintOptions) error {
+func printJobList(list *batch.JobList, w io.Writer, options PrintOptions) error {
 	for _, job := range list.Items {
 		if err := printJob(&job, w, options); err != nil {
 			return err
@@ -880,16 +881,19 @@ func getServiceExternalIP(svc *api.Service) string {
 		if len(svc.Spec.ExternalIPs) > 0 {
 			return strings.Join(svc.Spec.ExternalIPs, ",")
 		}
-		return "nodes"
+		return "<nodes>"
 	case api.ServiceTypeLoadBalancer:
 		lbIps := loadBalancerStatusStringer(svc.Status.LoadBalancer)
 		if len(svc.Spec.ExternalIPs) > 0 {
 			result := append(strings.Split(lbIps, ","), svc.Spec.ExternalIPs...)
 			return strings.Join(result, ",")
 		}
-		return lbIps
+		if len(lbIps) > 0 {
+			return lbIps
+		}
+		return "<pending>"
 	}
-	return "unknown"
+	return "<unknown>"
 }
 
 func makePortString(ports []api.ServicePort) string {
@@ -1784,7 +1788,7 @@ func formatWideHeaders(wide bool, t reflect.Type) []string {
 		if t.String() == "*api.ReplicationController" || t.String() == "*api.ReplicationControllerList" {
 			return []string{"CONTAINER(S)", "IMAGE(S)", "SELECTOR"}
 		}
-		if t.String() == "*extensions.Job" || t.String() == "*extensions.JobList" {
+		if t.String() == "*batch.Job" || t.String() == "*batch.JobList" {
 			return []string{"CONTAINER(S)", "IMAGE(S)", "SELECTOR"}
 		}
 		if t.String() == "*api.Service" || t.String() == "*api.ServiceList" {

@@ -2218,6 +2218,8 @@ const (
 	ResourcePersistentVolumeClaims ResourceName = "persistentvolumeclaims"
 	// ResourceServicesNodePorts, number
 	ResourceServicesNodePorts ResourceName = "services.nodeports"
+	// ResourceServicesLoadBalancers, number
+	ResourceServicesLoadBalancers ResourceName = "services.loadbalancers"
 	// CPU request, in cores. (500m = .5 cores)
 	ResourceRequestsCPU ResourceName = "requests.cpu"
 	// Memory request, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
@@ -2409,7 +2411,7 @@ type ConfigMapList struct {
 	unversioned.ListMeta `json:"metadata,omitempty"`
 
 	// Items is the list of ConfigMaps.
-	Items []ConfigMap `json:"items,omitempty"`
+	Items []ConfigMap `json:"items"`
 }
 
 // These constants are for remote command execution and port forwarding and are

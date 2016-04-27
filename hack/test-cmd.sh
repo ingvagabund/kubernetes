@@ -183,7 +183,7 @@ kube::log::status "Starting kube-apiserver"
 # Admission Controllers to invoke prior to persisting objects in cluster
 ADMISSION_CONTROL="NamespaceLifecycle,LimitRanger,ResourceQuota"
 
-KUBE_API_VERSIONS="v1,autoscaling/v1,batch/v1,apps/v1alpha1,extensions/v1beta1" "${KUBE_OUTPUT_HOSTBIN}/kube-apiserver" \
+"${KUBE_OUTPUT_HOSTBIN}/kube-apiserver" \
   --address="127.0.0.1" \
   --public-address-override="127.0.0.1" \
   --port="${API_PORT}" \
@@ -269,6 +269,26 @@ runTests() {
 
   # Passing no arguments to create is an error
   ! kubectl create
+
+  #######################
+  # kubectl config set #
+  #######################
+
+  kube::log::status "Testing kubectl(${version}:config set)"
+
+  kubectl config set-cluster test-cluster --server="https://does-not-work"
+
+  # Get the api cert and add a comment to avoid flag parsing problems
+  cert_data=$(echo "#Comment" && cat "${TMPDIR:-/tmp/}apiserver.crt")
+
+  kubectl config set clusters.test-cluster.certificate-authority-data "$cert_data" --set-raw-bytes
+  r_writen=$(kubectl config view --raw -o jsonpath='{.clusters[?(@.name == "test-cluster")].cluster.certificate-authority-data}')
+
+  encoded=$(echo -n "$cert_data" | base64 --wrap=0)
+  kubectl config set clusters.test-cluster.certificate-authority-data "$encoded"
+  e_writen=$(kubectl config view --raw -o jsonpath='{.clusters[?(@.name == "test-cluster")].cluster.certificate-authority-data}')
+
+  test "$e_writen" == "$r_writen"
 
   #######################
   # kubectl local proxy #
@@ -1792,6 +1812,6 @@ __EOF__
   kube::test::clear_all
 }
 
-KUBE_API_VERSIONS="v1,autoscaling/v1,batch/v1,apps/v1alpha1,extensions/v1beta1" runTests "v1"
+runTests "v1"
 
 kube::log::status "TEST PASSED"

@@ -102,7 +102,7 @@ type Config struct {
 	EventTTL                time.Duration
 	KubeletClient           kubeletclient.KubeletClient
 	// Used to start and monitor tunneling
-	Tunneler Tunneler
+	Tunneler genericapiserver.Tunneler
 
 	disableThirdPartyControllerForTesting bool
 }
@@ -136,7 +136,7 @@ type Master struct {
 	disableThirdPartyControllerForTesting bool
 
 	// Used to start and monitor tunneling
-	tunneler Tunneler
+	tunneler genericapiserver.Tunneler
 }
 
 // thirdPartyEntry combines objects storage and API group into one struct
@@ -203,11 +203,10 @@ func (m *Master) InstallAPIs(c *Config) {
 			VersionedResourcesStorageMap: map[string]map[string]rest.Storage{
 				"v1": m.v1ResourcesStorage,
 			},
-			IsLegacyGroup:              true,
-			Scheme:                     api.Scheme,
-			ParameterCodec:             api.ParameterCodec,
-			NegotiatedSerializer:       api.Codecs,
-			NegotiatedStreamSerializer: api.StreamCodecs,
+			IsLegacyGroup:        true,
+			Scheme:               api.Scheme,
+			ParameterCodec:       api.ParameterCodec,
+			NegotiatedSerializer: api.Codecs,
 		}
 		if autoscalingGroupVersion := (unversioned.GroupVersion{Group: "autoscaling", Version: "v1"}); registered.IsEnabledVersion(autoscalingGroupVersion) {
 			apiGroupInfo.SubresourceGroupVersionKind = map[string]unversioned.GroupVersionKind{
@@ -229,7 +228,7 @@ func (m *Master) InstallAPIs(c *Config) {
 	}
 
 	// TODO(nikhiljindal): Refactor generic parts of support services (like /versions) to genericapiserver.
-	apiserver.InstallSupport(m.MuxHelper, m.RootWebService, healthzChecks...)
+	webservices := apiserver.InstallSupport(m.MuxHelper, healthzChecks...)
 
 	if c.EnableProfiling {
 		m.MuxHelper.HandleFunc("/metrics", MetricsWithReset)
@@ -237,8 +236,9 @@ func (m *Master) InstallAPIs(c *Config) {
 		m.MuxHelper.HandleFunc("/metrics", defaultMetricsHandler)
 	}
 
-	// Install root web services
-	m.HandlerContainer.Add(m.RootWebService)
+	for i := range webservices {
+		m.HandlerContainer.Add(webservices[i])
+	}
 
 	// allGroups records all supported groups at /apis
 	allGroups := []unversioned.APIGroup{}
@@ -260,11 +260,10 @@ func (m *Master) InstallAPIs(c *Config) {
 			VersionedResourcesStorageMap: map[string]map[string]rest.Storage{
 				"v1beta1": extensionResources,
 			},
-			OptionsExternalVersion:     &registered.GroupOrDie(api.GroupName).GroupVersion,
-			Scheme:                     api.Scheme,
-			ParameterCodec:             api.ParameterCodec,
-			NegotiatedSerializer:       api.Codecs,
-			NegotiatedStreamSerializer: api.StreamCodecs,
+			OptionsExternalVersion: &registered.GroupOrDie(api.GroupName).GroupVersion,
+			Scheme:                 api.Scheme,
+			ParameterCodec:         api.ParameterCodec,
+			NegotiatedSerializer:   api.Codecs,
 		}
 		apiGroupsInfo = append(apiGroupsInfo, apiGroupInfo)
 
@@ -293,11 +292,10 @@ func (m *Master) InstallAPIs(c *Config) {
 			VersionedResourcesStorageMap: map[string]map[string]rest.Storage{
 				"v1": autoscalingResources,
 			},
-			OptionsExternalVersion:     &registered.GroupOrDie(api.GroupName).GroupVersion,
-			Scheme:                     api.Scheme,
-			ParameterCodec:             api.ParameterCodec,
-			NegotiatedSerializer:       api.Codecs,
-			NegotiatedStreamSerializer: api.StreamCodecs,
+			OptionsExternalVersion: &registered.GroupOrDie(api.GroupName).GroupVersion,
+			Scheme:                 api.Scheme,
+			ParameterCodec:         api.ParameterCodec,
+			NegotiatedSerializer:   api.Codecs,
 		}
 		apiGroupsInfo = append(apiGroupsInfo, apiGroupInfo)
 
@@ -326,11 +324,10 @@ func (m *Master) InstallAPIs(c *Config) {
 			VersionedResourcesStorageMap: map[string]map[string]rest.Storage{
 				"v1": batchResources,
 			},
-			OptionsExternalVersion:     &registered.GroupOrDie(api.GroupName).GroupVersion,
-			Scheme:                     api.Scheme,
-			ParameterCodec:             api.ParameterCodec,
-			NegotiatedSerializer:       api.Codecs,
-			NegotiatedStreamSerializer: api.StreamCodecs,
+			OptionsExternalVersion: &registered.GroupOrDie(api.GroupName).GroupVersion,
+			Scheme:                 api.Scheme,
+			ParameterCodec:         api.ParameterCodec,
+			NegotiatedSerializer:   api.Codecs,
 		}
 		apiGroupsInfo = append(apiGroupsInfo, apiGroupInfo)
 
@@ -358,11 +355,10 @@ func (m *Master) InstallAPIs(c *Config) {
 			VersionedResourcesStorageMap: map[string]map[string]rest.Storage{
 				"v1alpha1": appsResources,
 			},
-			OptionsExternalVersion:     &registered.GroupOrDie(api.GroupName).GroupVersion,
-			Scheme:                     api.Scheme,
-			ParameterCodec:             api.ParameterCodec,
-			NegotiatedSerializer:       api.Codecs,
-			NegotiatedStreamSerializer: api.StreamCodecs,
+			OptionsExternalVersion: &registered.GroupOrDie(api.GroupName).GroupVersion,
+			Scheme:                 api.Scheme,
+			ParameterCodec:         api.ParameterCodec,
+			NegotiatedSerializer:   api.Codecs,
 		}
 		apiGroupsInfo = append(apiGroupsInfo, apiGroupInfo)
 
@@ -713,9 +709,8 @@ func (m *Master) thirdpartyapi(group, kind, version string) *apiserver.APIGroupV
 		Storage:                storage,
 		OptionsExternalVersion: &optionsExternalVersion,
 
-		Serializer:       thirdpartyresourcedata.NewNegotiatedSerializer(api.Codecs, kind, externalVersion, internalVersion),
-		StreamSerializer: thirdpartyresourcedata.NewNegotiatedSerializer(api.StreamCodecs, kind, externalVersion, internalVersion),
-		ParameterCodec:   thirdpartyresourcedata.NewThirdPartyParameterCodec(api.ParameterCodec),
+		Serializer:     thirdpartyresourcedata.NewNegotiatedSerializer(api.Codecs, kind, externalVersion, internalVersion),
+		ParameterCodec: thirdpartyresourcedata.NewThirdPartyParameterCodec(api.ParameterCodec),
 
 		Context: m.RequestContextMapper,
 

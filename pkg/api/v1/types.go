@@ -2676,6 +2676,8 @@ const (
 	ResourcePersistentVolumeClaims ResourceName = "persistentvolumeclaims"
 	// ResourceServicesNodePorts, number
 	ResourceServicesNodePorts ResourceName = "services.nodeports"
+	// ResourceServicesLoadBalancers, number
+	ResourceServicesLoadBalancers ResourceName = "services.loadbalancers"
 	// CPU request, in cores. (500m = .5 cores)
 	ResourceCPURequest ResourceName = "cpu.request"
 	// CPU limit, in cores. (500m = .5 cores)
@@ -2858,7 +2860,7 @@ type ConfigMapList struct {
 	unversioned.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
 	// Items is the list of ConfigMaps.
-	Items []ConfigMap `json:"items,omitempty" protobuf:"bytes,2,rep,name=items"`
+	Items []ConfigMap `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
 // Type and constants for component health validation.

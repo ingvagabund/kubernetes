@@ -151,11 +151,12 @@ func addTestTypes() {
 		&apiservertesting.Simple{}, &apiservertesting.SimpleList{}, &ListOptions{},
 		&api.DeleteOptions{}, &apiservertesting.SimpleGetOptions{}, &apiservertesting.SimpleRoot{},
 		&SimpleXGSubresource{})
-	api.Scheme.AddKnownTypes(testGroupVersion, &api.Pod{})
+	api.Scheme.AddKnownTypes(testGroupVersion, &v1.Pod{})
 	api.Scheme.AddKnownTypes(testInternalGroupVersion,
 		&apiservertesting.Simple{}, &apiservertesting.SimpleList{}, &api.ListOptions{},
 		&apiservertesting.SimpleGetOptions{}, &apiservertesting.SimpleRoot{},
 		&SimpleXGSubresource{})
+	api.Scheme.AddKnownTypes(testInternalGroupVersion, &api.Pod{})
 	// Register SimpleXGSubresource in both testGroupVersion and testGroup2Version, and also their
 	// their corresponding internal versions, to verify that the desired group version object is
 	// served in the tests.
@@ -287,7 +288,6 @@ func handleInternal(storage map[string]rest.Storage, admissionControl admission.
 		group.GroupVersion = grouplessGroupVersion
 		group.OptionsExternalVersion = &grouplessGroupVersion
 		group.Serializer = api.Codecs
-		group.StreamSerializer = api.StreamCodecs
 		if err := (&group).InstallREST(container); err != nil {
 			panic(fmt.Sprintf("unable to install container %s: %v", group.GroupVersion, err))
 		}
@@ -300,7 +300,6 @@ func handleInternal(storage map[string]rest.Storage, admissionControl admission.
 		group.GroupVersion = testGroupVersion
 		group.OptionsExternalVersion = &testGroupVersion
 		group.Serializer = api.Codecs
-		group.StreamSerializer = api.StreamCodecs
 		if err := (&group).InstallREST(container); err != nil {
 			panic(fmt.Sprintf("unable to install container %s: %v", group.GroupVersion, err))
 		}
@@ -313,15 +312,15 @@ func handleInternal(storage map[string]rest.Storage, admissionControl admission.
 		group.GroupVersion = newGroupVersion
 		group.OptionsExternalVersion = &newGroupVersion
 		group.Serializer = api.Codecs
-		group.StreamSerializer = api.StreamCodecs
 		if err := (&group).InstallREST(container); err != nil {
 			panic(fmt.Sprintf("unable to install container %s: %v", group.GroupVersion, err))
 		}
 	}
 
-	ws := new(restful.WebService)
-	InstallSupport(mux, ws)
-	container.Add(ws)
+	webservices := InstallSupport(mux)
+	for i := range webservices {
+		container.Add(webservices[i])
+	}
 	return &defaultAPIServer{mux, container}
 }
 
@@ -356,6 +355,8 @@ func TestSimpleOptionsSetupRight(t *testing.T) {
 }
 
 type SimpleRESTStorage struct {
+	lock sync.Mutex
+
 	errors map[string]error
 	list   []apiservertesting.Simple
 	item   apiservertesting.Simple
@@ -518,6 +519,8 @@ func (storage *SimpleRESTStorage) Update(ctx api.Context, obj runtime.Object) (r
 
 // Implement ResourceWatcher.
 func (storage *SimpleRESTStorage) Watch(ctx api.Context, options *api.ListOptions) (watch.Interface, error) {
+	storage.lock.Lock()
+	defer storage.lock.Unlock()
 	storage.checkContext(ctx)
 	storage.requestedLabelSelector = labels.Everything()
 	if options != nil && options.LabelSelector != nil {
@@ -537,6 +540,12 @@ func (storage *SimpleRESTStorage) Watch(ctx api.Context, options *api.ListOption
 	}
 	storage.fakeWatch = watch.NewFake()
 	return storage.fakeWatch, nil
+}
+
+func (storage *SimpleRESTStorage) Watcher() *watch.FakeWatcher {
+	storage.lock.Lock()
+	defer storage.lock.Unlock()
+	return storage.fakeWatch
 }
 
 // Implement Redirector.
@@ -1234,8 +1243,9 @@ func TestMetadata(t *testing.T) {
 		}
 	}
 	if matches["text/plain,application/json,application/yaml,application/vnd.kubernetes.protobuf"] == 0 ||
+		matches["application/json,application/json;stream=watch,application/vnd.kubernetes.protobuf,application/vnd.kubernetes.protobuf;stream=watch"] == 0 ||
 		matches["application/json,application/yaml,application/vnd.kubernetes.protobuf"] == 0 ||
-		matches["application/json,application/vnd.kubernetes.protobuf"] == 0 ||
+		matches["application/json"] == 0 ||
 		matches["*/*"] == 0 ||
 		len(matches) != 5 {
 		t.Errorf("unexpected mime types: %v", matches)
@@ -2415,9 +2425,8 @@ func TestUpdateREST(t *testing.T) {
 			GroupVersion:           newGroupVersion,
 			OptionsExternalVersion: &newGroupVersion,
 
-			Serializer:       api.Codecs,
-			StreamSerializer: api.StreamCodecs,
-			ParameterCodec:   api.ParameterCodec,
+			Serializer:     api.Codecs,
+			ParameterCodec: api.ParameterCodec,
 		}
 	}
 
@@ -2500,9 +2509,8 @@ func TestParentResourceIsRequired(t *testing.T) {
 		GroupVersion:           newGroupVersion,
 		OptionsExternalVersion: &newGroupVersion,
 
-		Serializer:       api.Codecs,
-		StreamSerializer: api.StreamCodecs,
-		ParameterCodec:   api.ParameterCodec,
+		Serializer:     api.Codecs,
+		ParameterCodec: api.ParameterCodec,
 	}
 	container := restful.NewContainer()
 	if err := group.InstallREST(container); err == nil {
@@ -2532,9 +2540,8 @@ func TestParentResourceIsRequired(t *testing.T) {
 		GroupVersion:           newGroupVersion,
 		OptionsExternalVersion: &newGroupVersion,
 
-		Serializer:       api.Codecs,
-		StreamSerializer: api.StreamCodecs,
-		ParameterCodec:   api.ParameterCodec,
+		Serializer:     api.Codecs,
+		ParameterCodec: api.ParameterCodec,
 	}
 	container = restful.NewContainer()
 	if err := group.InstallREST(container); err != nil {
@@ -3246,7 +3253,6 @@ func TestXGSubresource(t *testing.T) {
 		GroupVersion:           testGroupVersion,
 		OptionsExternalVersion: &testGroupVersion,
 		Serializer:             api.Codecs,
-		StreamSerializer:       api.StreamCodecs,
 
 		SubresourceGroupVersionKind: map[string]unversioned.GroupVersionKind{
 			"simple/subsimple": testGroup2Version.WithKind("SimpleXGSubresource"),
@@ -3257,9 +3263,10 @@ func TestXGSubresource(t *testing.T) {
 		panic(fmt.Sprintf("unable to install container %s: %v", group.GroupVersion, err))
 	}
 
-	ws := new(restful.WebService)
-	InstallSupport(mux, ws)
-	container.Add(ws)
+	webservices := InstallSupport(mux)
+	for i := range webservices {
+		container.Add(webservices[i])
+	}
 
 	handler := defaultAPIServer{mux, container}
 	server := httptest.NewServer(handler)

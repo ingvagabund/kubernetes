@@ -34,7 +34,6 @@ import (
 	dockercontainer "github.com/docker/engine-api/types/container"
 	dockerstrslice "github.com/docker/engine-api/types/strslice"
 	dockernat "github.com/docker/go-connections/nat"
-	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/glog"
 	cadvisorapi "github.com/google/cadvisor/info/v1"
 	"k8s.io/kubernetes/pkg/api"
@@ -164,6 +163,9 @@ type DockerManager struct {
 
 	// The api version cache of docker daemon.
 	versionCache *cache.VersionCache
+
+	// Provides image stats
+	*imageStatsProvider
 }
 
 // A subset of the pod.Manager interface extracted for testing purposes.
@@ -241,6 +243,7 @@ func NewDockerManager(
 		cpuCFSQuota:            cpuCFSQuota,
 		enableCustomMetrics:    enableCustomMetrics,
 		configureHairpinMode:   hairpinMode,
+		imageStatsProvider:     &imageStatsProvider{client},
 	}
 	dm.runner = lifecycle.NewHandlerRunner(httpClient, dm, dm)
 	if serializeImagePulls {
@@ -793,7 +796,7 @@ func (dm *DockerManager) GetPods(all bool) ([]*kubecontainer.Pod, error) {
 func (dm *DockerManager) ListImages() ([]kubecontainer.Image, error) {
 	var images []kubecontainer.Image
 
-	dockerImages, err := dm.client.ListImages(docker.ListImagesOptions{})
+	dockerImages, err := dm.client.ListImages(dockertypes.ImageListOptions{})
 	if err != nil {
 		return images, err
 	}
@@ -821,7 +824,9 @@ func (dm *DockerManager) IsImagePresent(image kubecontainer.ImageSpec) (bool, er
 
 // Removes the specified image.
 func (dm *DockerManager) RemoveImage(image kubecontainer.ImageSpec) error {
-	return dm.client.RemoveImage(image.Image)
+	// TODO(harryz) currently Runtime interface does not provide other remove options.
+	_, err := dm.client.RemoveImage(image.Image, dockertypes.ImageRemoveOptions{})
+	return err
 }
 
 // podInfraContainerChanged returns true if the pod infra container has changed.

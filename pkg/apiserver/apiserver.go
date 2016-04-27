@@ -85,11 +85,8 @@ type APIGroupVersion struct {
 
 	// Serializer is used to determine how to convert responses from API methods into bytes to send over
 	// the wire.
-	Serializer runtime.NegotiatedSerializer
-	// StreamSerializer is used for sending a series of objects to the client over a single channel, where
-	// the underlying channel has no innate framing (such as an io.Writer)
-	StreamSerializer runtime.NegotiatedSerializer
-	ParameterCodec   runtime.ParameterCodec
+	Serializer     runtime.NegotiatedSerializer
+	ParameterCodec runtime.ParameterCodec
 
 	Typer     runtime.ObjectTyper
 	Creater   runtime.ObjectCreater
@@ -167,19 +164,22 @@ func (g *APIGroupVersion) newInstaller() *APIInstaller {
 
 // TODO: document all handlers
 // InstallSupport registers the APIServer support functions
-func InstallSupport(mux Mux, ws *restful.WebService, checks ...healthz.HealthzChecker) {
+func InstallSupport(mux Mux, checks ...healthz.HealthzChecker) []*restful.WebService {
 	// TODO: convert healthz and metrics to restful and remove container arg
 	healthz.InstallHandler(mux, checks...)
 
 	// Set up a service to return the git code version.
-	ws.Path("/version")
-	ws.Doc("git code version from which this is built")
-	ws.Route(
-		ws.GET("/").To(handleVersion).
+	versionWS := new(restful.WebService)
+	versionWS.Path("/version")
+	versionWS.Doc("git code version from which this is built")
+	versionWS.Route(
+		versionWS.GET("/").To(handleVersion).
 			Doc("get the code version").
 			Operation("getCodeVersion").
 			Produces(restful.MIME_JSON).
 			Consumes(restful.MIME_JSON))
+
+	return []*restful.WebService{versionWS}
 }
 
 // InstallLogsSupport registers the APIServer log support function into a mux.

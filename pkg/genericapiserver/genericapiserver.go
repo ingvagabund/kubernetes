@@ -40,7 +40,7 @@ import (
 	"k8s.io/kubernetes/pkg/auth/authorizer"
 	"k8s.io/kubernetes/pkg/auth/handlers"
 	"k8s.io/kubernetes/pkg/registry/generic"
-	genericetcd "k8s.io/kubernetes/pkg/registry/generic/etcd"
+	"k8s.io/kubernetes/pkg/registry/generic/registry"
 	ipallocator "k8s.io/kubernetes/pkg/registry/service/ipallocator"
 	"k8s.io/kubernetes/pkg/runtime"
 	"k8s.io/kubernetes/pkg/ui"
@@ -82,8 +82,6 @@ type APIGroupInfo struct {
 	Scheme *runtime.Scheme
 	// NegotiatedSerializer controls how this group encodes and decodes data
 	NegotiatedSerializer runtime.NegotiatedSerializer
-	// NegotiatedStreamSerializer controls how streaming responses are encoded and decoded.
-	NegotiatedStreamSerializer runtime.NegotiatedSerializer
 	// ParameterCodec performs conversions for query parameters passed to API calls
 	ParameterCodec runtime.ParameterCodec
 
@@ -248,7 +246,7 @@ type GenericAPIServer struct {
 
 func (s *GenericAPIServer) StorageDecorator() generic.StorageDecorator {
 	if s.enableWatchCache {
-		return genericetcd.StorageWithCacher
+		return registry.StorageWithCacher
 	}
 	return generic.UndecoratedStorage
 }
@@ -824,7 +822,6 @@ func (s *GenericAPIServer) getAPIGroupVersion(apiGroupInfo *APIGroupInfo, groupV
 	version.Storage = storage
 	version.ParameterCodec = apiGroupInfo.ParameterCodec
 	version.Serializer = apiGroupInfo.NegotiatedSerializer
-	version.StreamSerializer = apiGroupInfo.NegotiatedStreamSerializer
 	version.Creater = apiGroupInfo.Scheme
 	version.Convertor = apiGroupInfo.Scheme
 	version.Typer = apiGroupInfo.Scheme
