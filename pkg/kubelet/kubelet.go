@@ -252,6 +252,8 @@ type Dependencies struct {
 	DynamicPluginProber     volume.DynamicPluginProber
 	TLSOptions              *server.TLSOptions
 	KubeletConfigController *kubeletconfig.Controller
+
+	ExternalRuntimeHealthChecker []RuntimeHealthChecker
 }
 
 // makePodSourceConfig creates a config.PodConfig from the given
@@ -702,6 +704,9 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	klet.pleg = pleg.NewGenericPLEG(klet.containerRuntime, plegChannelCapacity, plegRelistPeriod, klet.podCache, clock.RealClock{})
 	klet.runtimeState = newRuntimeState(maxWaitForContainerRuntime)
 	klet.runtimeState.addHealthCheck("PLEG", klet.pleg.Healthy)
+	for _, checker := range kubeDeps.ExternalRuntimeHealthChecker {
+		klet.runtimeState.addHealthCheck(checker.Name(), checker.Healthy)
+	}
 	klet.updatePodCIDR(kubeCfg.PodCIDR)
 
 	// setup containerGC

@@ -28,6 +28,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	utilflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/apiserver/pkg/util/logs"
@@ -59,6 +60,14 @@ type HollowNodeConfig struct {
 	ServerPort          int
 	ContentType         string
 	UseRealProxier      bool
+
+	TurnUnhealthyAfter        bool
+	TurnUnhealthyPeriodically bool
+	UnhealthyDuration         metav1.Duration
+	HealthyDuration           metav1.Duration
+
+	NodeStatusUpdateFrequency metav1.Duration
+	NoSchedule                bool
 }
 
 const (
@@ -77,6 +86,15 @@ func (c *HollowNodeConfig) addFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&c.Morph, "morph", "", fmt.Sprintf("Specifies into which Hollow component this binary should morph. Allowed values: %v", knownMorphs.List()))
 	fs.StringVar(&c.ContentType, "kube-api-content-type", "application/vnd.kubernetes.protobuf", "ContentType of requests sent to apiserver.")
 	fs.BoolVar(&c.UseRealProxier, "use-real-proxier", true, "Set to true if you want to use real proxier inside hollow-proxy.")
+
+	// kubelet runtime distrupting flags
+	fs.BoolVar(&c.TurnUnhealthyAfter, "turn-unhealthy-after", false, "Have kubelet start reporting runtime unhealty after duration.  Used together with --unhealthy-duration.")
+	fs.BoolVar(&c.TurnUnhealthyPeriodically, "turn-unhealthy-periodically", false, "Have kubelet start reporting runtime unhealty after duration.  Used together with --unhealthy-duration.")
+	fs.DurationVar(&c.UnhealthyDuration.Duration, "unhealthy-duration", c.UnhealthyDuration.Duration, "Unhealthy duration. Examples: '10s' or '2m'")
+	fs.DurationVar(&c.HealthyDuration.Duration, "healthy-duration", c.HealthyDuration.Duration, "Healthy duration. Examples: '10s' or '2m'")
+
+	fs.DurationVar(&c.NodeStatusUpdateFrequency.Duration, "node-status-update-frequency", 10*time.Second, "Kubelet node status update frequency")
+	fs.BoolVar(&c.NoSchedule, "no-schedule", false, "Create kubemark=true:NoSchedule taint")
 }
 
 func (c *HollowNodeConfig) createClientConfigFromFile() (*restclient.Config, error) {
@@ -163,6 +181,16 @@ func run(config *HollowNodeConfig) {
 			WithTraceDisabled: true,
 		}
 
+		RuntimeDisrupter := &kubemark.RuntimeDisrupter{
+			HealthyDuration:           config.HealthyDuration,
+			UnhealthyDuration:         config.UnhealthyDuration,
+			TurnUnhealthyAfter:        config.TurnUnhealthyAfter,
+			TurnUnhealthyPeriodically: config.TurnUnhealthyPeriodically,
+		}
+
+		RuntimeDisrupter.Start()
+		defer RuntimeDisrupter.Stop()
+
 		hollowKubelet := kubemark.NewHollowKubelet(
 			config.NodeName,
 			client,
@@ -173,6 +201,9 @@ func run(config *HollowNodeConfig) {
 			containerManager,
 			maxPods,
 			podsPerCore,
+			RuntimeDisrupter,
+			config.NodeStatusUpdateFrequency.Duration,
+			config.NoSchedule,
 		)
 		hollowKubelet.Run()
 	}
