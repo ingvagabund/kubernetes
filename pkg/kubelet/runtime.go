@@ -107,3 +107,12 @@ func newRuntimeState(
 		networkError:             fmt.Errorf("network state unknown"),
 	}
 }
+
+// RuntimeHealthChecker for any implementations capable of providing
+// kubelet runtime check.
+type RuntimeHealthChecker interface {
+	// Name for health checker name
+	Name() string
+	// Healthy checks if specific part of runtime is healthy
+	Healthy() (bool, error)
+}
