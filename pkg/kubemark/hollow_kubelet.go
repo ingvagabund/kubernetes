@@ -24,6 +24,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	kubeletapp "k8s.io/kubernetes/cmd/kubelet/app"
 	"k8s.io/kubernetes/cmd/kubelet/app/options"
+	"k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/kubelet"
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
@@ -56,11 +57,14 @@ func NewHollowKubelet(
 	kubeletPort, kubeletReadOnlyPort int,
 	containerManager cm.ContainerManager,
 	maxPods int, podsPerCore int,
+	runtimeDisrupter *RuntimeDisrupter,
+	nodeStatusUpdateFrequency time.Duration,
+	noScheduleTaint bool,
 ) *HollowKubelet {
 	// -----------------
 	// Static config
 	// -----------------
-	f, c := GetHollowKubeletConfig(nodeName, kubeletPort, kubeletReadOnlyPort, maxPods, podsPerCore)
+	f, c := GetHollowKubeletConfig(nodeName, kubeletPort, kubeletReadOnlyPort, maxPods, podsPerCore, nodeStatusUpdateFrequency, noScheduleTaint)
 
 	// -----------------
 	// Injected objects
@@ -81,6 +85,7 @@ func NewHollowKubelet(
 		OOMAdjuster:        oom.NewFakeOOMAdjuster(),
 		Mounter:            mount.New("" /* default mount path */),
 		Subpather:          &subpath.FakeSubpath{},
+		ExternalRuntimeHealthChecker: []kubelet.RuntimeHealthChecker{runtimeDisrupter},
 	}
 
 	return &HollowKubelet{
@@ -108,7 +113,9 @@ func GetHollowKubeletConfig(
 	kubeletPort int,
 	kubeletReadOnlyPort int,
 	maxPods int,
-	podsPerCore int) (*options.KubeletFlags, *kubeletconfig.KubeletConfiguration) {
+	podsPerCore int,
+	nodeStatusUpdateFrequency time.Duration,
+	noScheduleTaint bool) (*options.KubeletFlags, *kubeletconfig.KubeletConfiguration) {
 
 	testRootDir := utils.MakeTempDirOrDie("hollow-kubelet.", "")
 	podFilePath := utils.MakeTempDirOrDie("static-pods", testRootDir)
@@ -125,6 +132,15 @@ func GetHollowKubeletConfig(
 	f.RegisterNode = true
 	f.RegisterSchedulable = true
 	f.ProviderID = fmt.Sprintf("kubemark://%v", nodeName)
+	if noScheduleTaint {
+		f.RegisterWithTaints = []core.Taint{
+			{
+				Key:    "kubemark",
+				Value:  "true",
+				Effect: core.TaintEffectNoSchedule,
+			},
+		}
+	}
 
 	// Config struct
 	c, err := options.NewKubeletConfiguration()
@@ -139,7 +155,7 @@ func GetHollowKubeletConfig(
 	c.StaticPodPath = podFilePath
 	c.FileCheckFrequency.Duration = 20 * time.Second
 	c.HTTPCheckFrequency.Duration = 20 * time.Second
-	c.NodeStatusUpdateFrequency.Duration = 10 * time.Second
+	c.NodeStatusUpdateFrequency.Duration = nodeStatusUpdateFrequency
 	c.SyncFrequency.Duration = 10 * time.Second
 	c.EvictionPressureTransitionPeriod.Duration = 5 * time.Minute
 	c.MaxPods = int32(maxPods)
