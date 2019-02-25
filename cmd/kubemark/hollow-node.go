@@ -108,6 +108,13 @@ func (c *HollowNodeConfig) addFlags(fs *pflag.FlagSet) {
 }
 
 func (c *HollowNodeConfig) createClientConfigFromFile() (*restclient.Config, error) {
+	// Try the in-cluster config
+	if config, err := restclient.InClusterConfig(); err == nil {
+		config.ContentType = c.ContentType
+		config.QPS = 10
+		config.Burst = 20
+		return config, nil
+	}
 	clientConfig, err := clientcmd.LoadFromFile(c.KubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("error while loading kubeconfig from file %v: %v", c.KubeconfigPath, err)
