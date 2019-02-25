@@ -88,7 +88,7 @@ func (c *HollowNodeConfig) addFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&c.UseRealProxier, "use-real-proxier", true, "Set to true if you want to use real proxier inside hollow-proxy.")
 
 	// kubelet runtime distrupting flags
-	fs.BoolVar(&c.TurnUnhealthyAfter, "turn-unhealthy-after", false, "Have kubelet start reporting runtime unhealty after duration.  Used together with --unhealthy-duration.")
+	fs.BoolVar(&c.TurnUnhealthyAfter, "turn-unhealthy-after", false, "Have kubelet start reporting runtime unhealty after duration.  Used together with --healthy-duration.")
 	fs.BoolVar(&c.TurnUnhealthyPeriodically, "turn-unhealthy-periodically", false, "Have kubelet start reporting runtime unhealty after duration.  Used together with --unhealthy-duration.")
 	fs.DurationVar(&c.UnhealthyDuration.Duration, "unhealthy-duration", c.UnhealthyDuration.Duration, "Unhealthy duration. Examples: '10s' or '2m'")
 	fs.DurationVar(&c.HealthyDuration.Duration, "healthy-duration", c.HealthyDuration.Duration, "Healthy duration. Examples: '10s' or '2m'")
@@ -98,6 +98,13 @@ func (c *HollowNodeConfig) addFlags(fs *pflag.FlagSet) {
 }
 
 func (c *HollowNodeConfig) createClientConfigFromFile() (*restclient.Config, error) {
+	// Try the in-cluster config
+	if config, err := restclient.InClusterConfig(); err == nil {
+		config.ContentType = c.ContentType
+		config.QPS = 10
+		config.Burst = 20
+		return config, nil
+	}
 	clientConfig, err := clientcmd.LoadFromFile(c.KubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("error while loading kubeconfig from file %v: %v", c.KubeconfigPath, err)

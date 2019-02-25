@@ -43,11 +43,11 @@ func (rd *RuntimeDisrupter) Start() {
 	if rd.TurnUnhealthyAfter {
 		// Wait for TurnUnhealthyAfter time, then switch to unhealthy
 		go func() {
-			time.Sleep(rd.UnhealthyDuration.Duration)
+			time.Sleep(rd.HealthyDuration.Duration)
 			rd.healthyMux.Lock()
 			defer rd.healthyMux.Unlock()
 			rd.healthy = false
-			rd.healthyErr = fmt.Errorf("reporting unhealty indefinitely on request (%v after start up)", rd.UnhealthyDuration.Duration)
+			rd.healthyErr = fmt.Errorf("reporting unhealty indefinitely on request (%v after start up)", rd.HealthyDuration.Duration)
 		}()
 	}
 	if rd.TurnUnhealthyPeriodically {
