@@ -25,7 +25,9 @@ import (
 
 // Fake cAdvisor implementation.
 type Fake struct {
-	NodeName string
+	NodeName       string
+	NumCores       *int
+	MemoryCapacity *uint64
 }
 
 const (
@@ -61,10 +63,20 @@ func (c *Fake) DockerContainer(name string, req *cadvisorapi.ContainerInfoReques
 func (c *Fake) MachineInfo() (*cadvisorapi.MachineInfo, error) {
 	// Simulate a machine with 1 core and 3.75GB of memory.
 	// We set it to non-zero values to make non-zero-capacity machines in Kubemark.
+	numCores := FakeNumCores
+	if c.NumCores != nil {
+		numCores = *c.NumCores
+	}
+
+	var memoryCapacity uint64 = FakeMemoryCapacity
+	if c.MemoryCapacity != nil {
+		memoryCapacity = *c.MemoryCapacity
+	}
+
 	return &cadvisorapi.MachineInfo{
-		NumCores:       FakeNumCores,
+		NumCores:       numCores,
 		InstanceID:     cadvisorapi.InstanceID(c.NodeName),
-		MemoryCapacity: FakeMemoryCapacity,
+		MemoryCapacity: memoryCapacity,
 	}, nil
 }
 

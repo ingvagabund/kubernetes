@@ -75,6 +75,10 @@ type hollowNodeConfig struct {
 	NodeStatusUpdateFrequency metav1.Duration
 	// NoSchedule sets NoSchedule taint when specified
 	NoSchedule bool
+	// NumCores sets the number of cores in this machine (defaults to 1)
+	NumCores int
+	// MemoryCapacity sets the amount of memory (in bytes) in this machine
+	MemoryCapacity uint64
 }
 
 const (
@@ -105,6 +109,8 @@ func (c *hollowNodeConfig) addFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&c.TurnUnhealthyPeriodically, "turn-unhealthy-periodically", false, "Have kubelet start reporting runtime unhealty after duration.  Used together with --unhealthy-duration.")
 	fs.DurationVar(&c.UnhealthyDuration.Duration, "unhealthy-duration", c.UnhealthyDuration.Duration, "Unhealthy duration. Examples: '10s' or '2m'")
 	fs.DurationVar(&c.HealthyDuration.Duration, "healthy-duration", c.HealthyDuration.Duration, "Healthy duration. Examples: '10s' or '2m'")
+	fs.IntVar(&c.NumCores, "num-cores", 1, "The number of cores in this machine")
+	fs.Uint64Var(&c.MemoryCapacity, "memory-capacity", 4026531840, "The amount of memory (in bytes) in this machine")
 }
 
 func (c *hollowNodeConfig) createClientConfigFromFile() (*restclient.Config, error) {
@@ -184,7 +190,9 @@ func run(config *hollowNodeConfig) {
 
 	if config.Morph == "kubelet" {
 		cadvisorInterface := &cadvisortest.Fake{
-			NodeName: config.NodeName,
+			NodeName:       config.NodeName,
+			NumCores:       &config.NumCores,
+			MemoryCapacity: &config.MemoryCapacity,
 		}
 		containerManager := cm.NewStubContainerManager()
 
