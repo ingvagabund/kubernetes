@@ -33,11 +33,6 @@ const (
 	// SchedulerDefaultProviderName defines the default provider names
 	SchedulerDefaultProviderName = "DefaultProvider"
 
-	// DefaultInsecureSchedulerPort is the default port for the scheduler status server.
-	// May be overridden by a flag at startup.
-	// Deprecated: use the secure KubeSchedulerPort instead.
-	DefaultInsecureSchedulerPort = 10251
-
 	// DefaultKubeSchedulerPort is the default port for the scheduler status server.
 	// May be overridden by a flag at startup.
 	DefaultKubeSchedulerPort = 10259
@@ -72,10 +67,10 @@ type KubeSchedulerConfiguration struct {
 	// settings for the proxy server to use when communicating with the apiserver.
 	ClientConnection componentbaseconfig.ClientConnectionConfiguration
 	// HealthzBindAddress is the IP address and port for the health check server to serve on,
-	// defaulting to 0.0.0.0:10251
+	// defaulting to 0.0.0.0:10259
 	HealthzBindAddress string
 	// MetricsBindAddress is the IP address and port for the metrics server to
-	// serve on, defaulting to 0.0.0.0:10251.
+	// serve on, defaulting to 0.0.0.0:10259.
 	MetricsBindAddress string
 
 	// DebuggingConfiguration holds configuration for Debugging related features

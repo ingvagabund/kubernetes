@@ -54,10 +54,10 @@ type KubeSchedulerConfiguration struct {
 	// settings for the proxy server to use when communicating with the apiserver.
 	ClientConnection componentbaseconfigv1alpha1.ClientConnectionConfiguration `json:"clientConnection"`
 	// HealthzBindAddress is the IP address and port for the health check server to serve on,
-	// defaulting to 0.0.0.0:10251
+	// defaulting to 0.0.0.0:10259
 	HealthzBindAddress *string `json:"healthzBindAddress,omitempty"`
 	// MetricsBindAddress is the IP address and port for the metrics server to
-	// serve on, defaulting to 0.0.0.0:10251.
+	// serve on, defaulting to 0.0.0.0:10259.
 	MetricsBindAddress *string `json:"metricsBindAddress,omitempty"`
 
 	// DebuggingConfiguration holds configuration for Debugging related features
