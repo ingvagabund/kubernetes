@@ -1217,7 +1217,6 @@ clientConnection:
   qps: 0
 enableContentionProfiling: false
 enableProfiling: false
-healthzBindAddress: ""
 kind: KubeSchedulerConfiguration
 leaderElection:
   leaderElect: false
@@ -1227,7 +1226,6 @@ leaderElection:
   resourceName: ""
   resourceNamespace: ""
   retryPeriod: 0s
-metricsBindAddress: ""
 parallelism: 8
 percentageOfNodesToScore: 0
 podInitialBackoffSeconds: 0

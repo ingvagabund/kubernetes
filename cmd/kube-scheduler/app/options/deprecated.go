@@ -18,6 +18,7 @@ package options
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -36,11 +37,27 @@ type DeprecatedOptions struct {
 	UseLegacyPolicyConfig    bool
 }
 
+// TODO: remove these insecure flags in v1.24
+func addDummyInsecureFlags(fs *pflag.FlagSet) {
+	var (
+		bindAddr = net.IPv4(127, 0, 0, 1)
+		bindPort = 0
+	)
+	fs.IPVar(&bindAddr, "address", bindAddr,
+		"The IP address on which to serve the insecure --port (set to 0.0.0.0 for all IPv4 interfaces and :: for all IPv6 interfaces).")
+	fs.MarkDeprecated("address", "This flag has no effect now and will be removed in v1.24.")
+
+	fs.IntVar(&bindPort, "port", bindPort, "The port on which to serve unsecured, unauthenticated access. Set to 0 to disable.")
+	fs.MarkDeprecated("port", "This flag has no effect now and will be removed in v1.24.")
+}
+
 // AddFlags adds flags for the deprecated options.
 func (o *DeprecatedOptions) AddFlags(fs *pflag.FlagSet, cfg *kubeschedulerconfig.KubeSchedulerConfiguration) {
 	if o == nil {
 		return
 	}
+
+	addDummyInsecureFlags(fs)
 
 	fs.StringVar(&o.PolicyConfigFile, "policy-config-file", o.PolicyConfigFile, "DEPRECATED: file with scheduler policy configuration. This file is used if policy ConfigMap is not provided or --use-legacy-policy-config=true. Note: The predicates/priorities defined in this file will take precedence over any profiles define in ComponentConfig.")
 	usage := fmt.Sprintf("DEPRECATED: name of the ConfigMap object that contains scheduler's policy configuration. It must exist in the system namespace before scheduler initialization if --use-legacy-policy-config=false. The config must be provided as the value of an element in 'Data' map with the key='%v'. Note: The predicates/priorities defined in this file will take precedence over any profiles define in ComponentConfig.", kubeschedulerconfig.SchedulerPolicyConfigMapKey)

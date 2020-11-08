@@ -129,16 +129,6 @@ func (in *KubeSchedulerConfiguration) DeepCopyInto(out *KubeSchedulerConfigurati
 	}
 	in.LeaderElection.DeepCopyInto(&out.LeaderElection)
 	out.ClientConnection = in.ClientConnection
-	if in.HealthzBindAddress != nil {
-		in, out := &in.HealthzBindAddress, &out.HealthzBindAddress
-		*out = new(string)
-		**out = **in
-	}
-	if in.MetricsBindAddress != nil {
-		in, out := &in.MetricsBindAddress, &out.MetricsBindAddress
-		*out = new(string)
-		**out = **in
-	}
 	in.DebuggingConfiguration.DeepCopyInto(&out.DebuggingConfiguration)
 	if in.PercentageOfNodesToScore != nil {
 		in, out := &in.PercentageOfNodesToScore, &out.PercentageOfNodesToScore
