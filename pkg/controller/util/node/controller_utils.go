@@ -29,7 +29,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	utilpod "k8s.io/kubernetes/pkg/api/v1/pod"
@@ -191,12 +191,15 @@ func RecordNodeStatusChange(recorder record.EventRecorder, node *v1.Node, newSta
 // SwapNodeControllerTaint returns true in case of success and false
 // otherwise.
 func SwapNodeControllerTaint(kubeClient clientset.Interface, taintsToAdd, taintsToRemove []*v1.Taint, node *v1.Node) bool {
+	klog.Infof("Running SwapNodeControllerTaint")
 	for _, taintToAdd := range taintsToAdd {
 		now := metav1.Now()
 		taintToAdd.TimeAdded = &now
+		klog.Infof("taintToAdd: %#v", taintToAdd)
 	}
 
 	err := controller.AddOrUpdateTaintOnNode(kubeClient, node.Name, taintsToAdd...)
+	klog.Infof("controller.AddOrUpdateTaintOnNode err: %v", err)
 	if err != nil {
 		utilruntime.HandleError(
 			fmt.Errorf(
@@ -209,6 +212,7 @@ func SwapNodeControllerTaint(kubeClient clientset.Interface, taintsToAdd, taints
 	klog.V(4).Infof("Added %+v Taint to Node %v", taintsToAdd, node.Name)
 
 	err = controller.RemoveTaintOffNode(kubeClient, node.Name, node, taintsToRemove...)
+	klog.Infof("controller.RemoveTaintOffNode err: %v", err)
 	if err != nil {
 		utilruntime.HandleError(
 			fmt.Errorf(

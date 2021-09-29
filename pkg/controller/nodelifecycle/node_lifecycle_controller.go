@@ -567,6 +567,7 @@ func (nc *Controller) Run(stopCh <-chan struct{}) {
 		go wait.Until(nc.doPodProcessingWorker, time.Second, stopCh)
 	}
 
+	klog.Infof("nc.runTaintManager: %v", nc.runTaintManager)
 	if nc.runTaintManager {
 		// Handling taint based evictions. Because we don't want a dedicated logic in TaintManager for NC-originated
 		// taints and we normally don't rate limit evictions caused by taints, we need to rate limit adding taints.
@@ -667,12 +668,16 @@ func (nc *Controller) doNoScheduleTaintingPass(nodeName string) error {
 }
 
 func (nc *Controller) doNoExecuteTaintingPass() {
+	klog.Infof("Running doNoExecuteTaintingPass")
 	nc.evictorLock.Lock()
 	defer nc.evictorLock.Unlock()
 	for k := range nc.zoneNoExecuteTainter {
+		klog.Infof("Running nc.zoneNoExecuteTainter k: %v", k)
 		// Function should return 'false' and a time after which it should be retried, or 'true' if it shouldn't (it succeeded).
 		nc.zoneNoExecuteTainter[k].Try(func(value scheduler.TimedValue) (bool, time.Duration) {
+			klog.Infof("Running nc.zoneNoExecuteTainter[%v].Try", k)
 			node, err := nc.nodeLister.Get(value.Value)
+			klog.Infof("Invoked nc.nodeLister.Get(%v) = %#v, %v ", value.Value, node, err)
 			if apierrors.IsNotFound(err) {
 				klog.Warningf("Node %v no longer present in nodeLister!", value.Value)
 				return true, 0
@@ -699,6 +704,7 @@ func (nc *Controller) doNoExecuteTaintingPass() {
 			}
 
 			result := nodeutil.SwapNodeControllerTaint(nc.kubeClient, []*v1.Taint{&taintToAdd}, []*v1.Taint{&oppositeTaint}, node)
+			klog.Infof("nodeutil.SwapNodeControllerTaint result: %v", result)
 			if result {
 				//count the evictionsNumber
 				zone := utilnode.GetZoneKey(node)

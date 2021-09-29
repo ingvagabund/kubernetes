@@ -239,7 +239,16 @@ type ActionFunc func(TimedValue) (bool, time.Duration)
 // figure out a good way to do garbage collection for all Nodes that
 // were removed from the cluster.
 func (q *RateLimitedTimedQueue) Try(fn ActionFunc) {
+	klog.Infof("Running RateLimitedTimedQueue.Try")
+	klog.Infof("q.queue.set: %#v", q.queue.set)
+	klog.Infof("q.queue.queue: %#v", q.queue.queue)
+	for i, item := range q.queue.queue {
+		if item != nil {
+			klog.Infof("q.queue.queue[%v]: %#v", i, *item)
+		}
+	}
 	val, ok := q.queue.Head()
+	klog.Infof("q.queue.Head(): val=%v, ok=%v", val, ok)
 	q.limiterLock.Lock()
 	defer q.limiterLock.Unlock()
 	for ok {
@@ -254,14 +263,17 @@ func (q *RateLimitedTimedQueue) Try(fn ActionFunc) {
 		if now.Before(val.ProcessAt) {
 			break
 		}
-
+		klog.Infof("Running fn(%v)", val)
 		if ok, wait := fn(val); !ok {
+			klog.Infof("fn(%v): ok=%v, wait=%v", val, ok, wait)
 			val.ProcessAt = now.Add(wait + 1)
 			q.queue.Replace(val)
 		} else {
+			klog.Infof("fn(%v): ok=%v, wait=%v", val, ok, wait)
 			q.queue.RemoveFromQueue(val.Value)
 		}
 		val, ok = q.queue.Head()
+		klog.Infof("q.queue.Head(): val=%v, ok=%v", val, ok)
 	}
 }
 
